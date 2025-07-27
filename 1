@@ -1,0 +1,79 @@
+#!/usr/bin/env python3
+import time
+import random
+from datetime import datetime
+from sqlalchemy import create_engine, Column, Integer, String, Float, BigInteger
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker
+
+# ---------- Database Setup ----------
+# Update connection string with your actual MySQL credentials
+DB_URL = "mysql+pymysql://root:123456@localhost:3306/product_registry"
+engine = create_engine(DB_URL, echo=False)
+Base = declarative_base()
+Session = sessionmaker(bind=engine)
+
+# ---------- ORM Models ----------
+class ProductRegistry(Base):
+    __tablename__ = 'product_registry'    
+    id        = Column(Integer, primary_key=True, autoincrement=True)
+    batch_id  = Column(String(64), unique=True)
+
+class TemperatureLog(Base):
+    __tablename__ = 'temperature_log'
+    id          = Column(Integer, primary_key=True, autoincrement=True)
+    batch_id    = Column(String(64))
+    timestamp   = Column(BigInteger)  # UNIX timestamp (seconds)
+    temperature = Column(Float)
+
+class TemperatureAlert(Base):
+    __tablename__ = 'temperature_alert'
+    id           = Column(Integer, primary_key=True, autoincrement=True)
+    batch_id     = Column(String(64))
+    timestamp    = Column(BigInteger)
+    temperature  = Column(Float)
+    alert_reason = Column(String(128))
+
+# ---------- Configuration ----------
+THRESHOLD = 8.0    # °C threshold for alert
+INTERVAL  = 5     # seconds between each batch of readings
+
+# ---------- Main Monitoring Loop ----------
+def run_monitor():
+    session = Session()
+    print(f"▶️ Monitor started: generating readings for each batch every {INTERVAL} seconds")
+    try:
+        while True:
+            # 1. Fetch all batch IDs from the registry
+            batch_ids = [pr.batch_id for pr in session.query(ProductRegistry).all()]
+
+            now = int(time.time())
+            for batch in batch_ids:
+                temp = round(random.uniform(5.0, 10.0), 2)
+                # 2. Insert into temperature_log
+                log = TemperatureLog(batch_id=batch, timestamp=now, temperature=temp)
+                session.add(log)
+                session.commit()
+                print(f"[{datetime.fromtimestamp(now)}] Batch {batch}: inserted temp {temp}°C")
+
+                # 3. If exceeds threshold, insert an alert
+                if temp > THRESHOLD:
+                    alert = TemperatureAlert(
+                        batch_id=batch,
+                        timestamp=now,
+                        temperature=temp,
+                        alert_reason=f"Temp {temp}°C > {THRESHOLD}°C"
+                    )
+                    session.add(alert)
+                    session.commit()
+                    print(f"🚨 ALERT: Batch {batch}, temp {temp}°C")
+
+            # 4. Wait for next interval
+            time.sleep(INTERVAL)
+    except KeyboardInterrupt:
+        print("🛑 Monitoring stopped by user.")
+    finally:
+        session.close()
+
+if __name__ == "__main__":
+    run_monitor()
