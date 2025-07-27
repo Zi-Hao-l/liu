@@ -6,14 +6,14 @@ from sqlalchemy import create_engine, Column, Integer, String, Float, BigInteger
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
-# ---------- Database Setup ----------
-# Update connection string with your actual MySQL credentials
+# ---------- 数据库设置 ----------
+# 请使用你的实际MySQL凭据更新连接字符串
 DB_URL = "mysql+pymysql://root:123456@localhost:3306/product_registry"
 engine = create_engine(DB_URL, echo=False)
 Base = declarative_base()
 Session = sessionmaker(bind=engine)
 
-# ---------- ORM Models ----------
+# ---------- ORM模型 ----------
 class ProductRegistry(Base):
     __tablename__ = 'product_registry'    
     id        = Column(Integer, primary_key=True, autoincrement=True)
@@ -34,44 +34,44 @@ class TemperatureAlert(Base):
     temperature  = Column(Float)
     alert_reason = Column(String(128))
 
-# ---------- Configuration ----------
-THRESHOLD = 8.0    # °C threshold for alert
-INTERVAL  = 5     # seconds between each batch of readings
+# ---------- 配置参数 ----------
+THRESHOLD = 8.0    # 警报温度阈值 (°C)
+INTERVAL  = 5     # 每批次读数间隔时间 (秒)
 
-# ---------- Main Monitoring Loop ----------
+# ---------- 主监控循环 ----------
 def run_monitor():
     session = Session()
-    print(f"▶️ Monitor started: generating readings for each batch every {INTERVAL} seconds")
+    print(f"▶️ 监控器已启动：每 {INTERVAL} 秒为每个批次生成温度读数")
     try:
         while True:
-            # 1. Fetch all batch IDs from the registry
+            # 1. 从注册表获取所有批次ID
             batch_ids = [pr.batch_id for pr in session.query(ProductRegistry).all()]
 
             now = int(time.time())
             for batch in batch_ids:
                 temp = round(random.uniform(5.0, 10.0), 2)
-                # 2. Insert into temperature_log
+                # 2. 插入温度日志
                 log = TemperatureLog(batch_id=batch, timestamp=now, temperature=temp)
                 session.add(log)
                 session.commit()
-                print(f"[{datetime.fromtimestamp(now)}] Batch {batch}: inserted temp {temp}°C")
+                print(f"[{datetime.fromtimestamp(now)}] 批次 {batch}: 已记录温度 {temp}°C")
 
-                # 3. If exceeds threshold, insert an alert
+                # 3. 如果超过阈值，插入警报
                 if temp > THRESHOLD:
                     alert = TemperatureAlert(
                         batch_id=batch,
                         timestamp=now,
                         temperature=temp,
-                        alert_reason=f"Temp {temp}°C > {THRESHOLD}°C"
+                        alert_reason=f"温度 {temp}°C > {THRESHOLD}°C"
                     )
                     session.add(alert)
                     session.commit()
-                    print(f"🚨 ALERT: Batch {batch}, temp {temp}°C")
+                    print(f"🚨 警报: 批次 {batch}, 温度 {temp}°C")
 
-            # 4. Wait for next interval
+            # 4. 等待下一个间隔
             time.sleep(INTERVAL)
     except KeyboardInterrupt:
-        print("🛑 Monitoring stopped by user.")
+        print("🛑 用户停止了监控。")
     finally:
         session.close()
 
